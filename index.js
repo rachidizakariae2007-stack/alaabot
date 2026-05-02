@@ -65,19 +65,31 @@ client.on('interactionCreate', async (interaction) => {
   if (!interaction.isChatInputCommand()) return;
 
   if (interaction.commandName === 'top') {
-    const topMessages = db.getTopMessages(interaction.guild.id);
-    const topVoice = db.getTopVoice(interaction.guild.id);
+    const topMessages = await db.getTopMessages(interaction.guild.id);
+    const topVoice = await db.getTopVoice(interaction.guild.id);
 
     const embed = new EmbedBuilder()
       .setColor(0x5865F2)
-      .setTitle('🏆 ALAA — Weekly Activity Report')
+      .setTitle('🏆 NEXUS — Weekly Activity Report')
       .addFields(
         { name: '💬 Top Message Senders', value: topMessages.length ? topMessages.map((u, i) => `**${i+1}.** ${u.username} — ${u.messages} messages`).join('\n') : 'No data yet.' },
         { name: '🎙️ Top Voice Members', value: topVoice.length ? topVoice.map((u, i) => `**${i+1}.** ${u.username} — ${formatTime(u.voice_minutes)}`).join('\n') : 'No data yet.' }
       )
-      .setFooter({ text: 'ALAA Bot' })
+      .setFooter({ text: 'NEXUS Bot' })
       .setTimestamp();
 
+    await interaction.reply({ embeds: [embed] });
+  }
+
+  if (interaction.commandName === 'mystats') {
+    const stats = await db.getUserStats(interaction.guild.id, interaction.user.id);
+    const embed = new EmbedBuilder()
+      .setColor(0x57F287)
+      .setTitle(`📊 ${interaction.user.username}'s Stats`)
+      .addFields(
+        { name: '💬 Messages', value: `${stats?.messages || 0}`, inline: true },
+        { name: '🎙️ Voice Time', value: formatTime(stats?.voice_minutes || 0), inline: true }
+      );
     await interaction.reply({ embeds: [embed] });
   }
 
