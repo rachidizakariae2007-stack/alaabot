@@ -1,7 +1,7 @@
-const Database = require('better-sqlite3');
-const db = new Database('alaa.db');
+const sqlite3 = require('sqlite3').verbose();
+const db = new sqlite3.Database('alaa.db');
 
-db.exec(`
+db.run(`
   CREATE TABLE IF NOT EXISTS stats (
     guild_id TEXT,
     user_id TEXT,
@@ -14,29 +14,35 @@ db.exec(`
 
 module.exports = {
   addMessage(guildId, userId, username) {
-    db.prepare(`
-      INSERT INTO stats (guild_id, user_id, username, messages, voice_minutes)
-      VALUES (?, ?, ?, 1, 0)
-      ON CONFLICT(guild_id, user_id) DO UPDATE SET messages = messages + 1, username = ?
-    `).run(guildId, userId, username, username);
+    db.run(`INSERT INTO stats (guild_id, user_id, username, messages, voice_minutes) VALUES (?, ?, ?, 1, 0) ON CONFLICT(guild_id, user_id) DO UPDATE SET messages = messages + 1, username = ?`,
+    [guildId, userId, username, username]);
   },
   addVoiceTime(guildId, userId, username, minutes) {
-    db.prepare(`
-      INSERT INTO stats (guild_id, user_id, username, messages, voice_minutes)
-      VALUES (?, ?, ?, 0, ?)
-      ON CONFLICT(guild_id, user_id) DO UPDATE SET voice_minutes = voice_minutes + ?, username = ?
-    `).run(guildId, userId, username, minutes, minutes, username);
+    db.run(`INSERT INTO stats (guild_id, user_id, username, messages, voice_minutes) VALUES (?, ?, ?, 0, ?) ON CONFLICT(guild_id, user_id) DO UPDATE SET voice_minutes = voice_minutes + ?, username = ?`,
+    [guildId, userId, username, minutes, minutes, username]);
   },
   getTopMessages(guildId) {
-    return db.prepare(`SELECT username, messages FROM stats WHERE guild_id = ? ORDER BY messages DESC LIMIT 5`).all(guildId);
+    return new Promise((resolve) => {
+      db.all(`SELECT username, messages FROM stats WHERE guild_id = ? ORDER BY messages DESC LIMIT 5`, [guildId], (err, rows) => {
+        resolve(rows || []);
+      });
+    });
   },
   getTopVoice(guildId) {
-    return db.prepare(`SELECT username, voice_minutes FROM stats WHERE guild_id = ? ORDER BY voice_minutes DESC LIMIT 5`).all(guildId);
+    return new Promise((resolve) => {
+      db.all(`SELECT username, voice_minutes FROM stats WHERE guild_id = ? ORDER BY voice_minutes DESC LIMIT 5`, [guildId], (err, rows) => {
+        resolve(rows || []);
+      });
+    });
   },
   getUserStats(guildId, userId) {
-    return db.prepare(`SELECT * FROM stats WHERE guild_id = ? AND user_id = ?`).get(guildId, userId);
+    return new Promise((resolve) => {
+      db.get(`SELECT * FROM stats WHERE guild_id = ? AND user_id = ?`, [guildId, userId], (err, row) => {
+        resolve(row || null);
+      });
+    });
   },
   resetStats(guildId) {
-    db.prepare(`DELETE FROM stats WHERE guild_id = ?`).run(guildId);
+    db.run(`DELETE FROM stats WHERE guild_id = ?`, [guildId]);
   }
 };
