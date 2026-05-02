@@ -1,48 +1,53 @@
-const sqlite3 = require('sqlite3').verbose();
-const db = new sqlite3.Database('alaa.db');
+const fs = require('fs');
+const path = require('path');
+const DB_FILE = path.join('/tmp', 'stats.json');
 
-db.run(`
-  CREATE TABLE IF NOT EXISTS stats (
-    guild_id TEXT,
-    user_id TEXT,
-    username TEXT,
-    messages INTEGER DEFAULT 0,
-    voice_minutes INTEGER DEFAULT 0,
-    PRIMARY KEY (guild_id, user_id)
-  )
-`);
+function load() {
+  try {
+    if (fs.existsSync(DB_FILE)) return JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
+  } catch {}
+  return {};
+}
+
+function save(data) {
+  fs.writeFileSync(DB_FILE, JSON.stringify(data));
+}
+
+function getUser(data, guildId, userId, username) {
+  if (!data[guildId]) data[guildId] = {};
+  if (!data[guildId][userId]) data[guildId][userId] = { username, messages: 0, voice_minutes: 0 };
+  data[guildId][userId].username = username;
+  return data[guildId][userId];
+}
 
 module.exports = {
   addMessage(guildId, userId, username) {
-    db.run(`INSERT INTO stats (guild_id, user_id, username, messages, voice_minutes) VALUES (?, ?, ?, 1, 0) ON CONFLICT(guild_id, user_id) DO UPDATE SET messages = messages + 1, username = ?`,
-    [guildId, userId, username, username]);
+    const data = load();
+    getUser(data, guildId, userId, username).messages += 1;
+    save(data);
   },
   addVoiceTime(guildId, userId, username, minutes) {
-    db.run(`INSERT INTO stats (guild_id, user_id, username, messages, voice_minutes) VALUES (?, ?, ?, 0, ?) ON CONFLICT(guild_id, user_id) DO UPDATE SET voice_minutes = voice_minutes + ?, username = ?`,
-    [guildId, userId, username, minutes, minutes, username]);
+    const data = load();
+    getUser(data, guildId, userId, username).voice_minutes += minutes;
+    save(data);
   },
   getTopMessages(guildId) {
-    return new Promise((resolve) => {
-      db.all(`SELECT username, messages FROM stats WHERE guild_id = ? ORDER BY messages DESC LIMIT 5`, [guildId], (err, rows) => {
-        resolve(rows || []);
-      });
-    });
+    const data = load();
+    if (!data[guildId]) return [];
+    return Object.values(data[guildId]).sort((a, b) => b.messages - a.messages).slice(0, 5);
   },
   getTopVoice(guildId) {
-    return new Promise((resolve) => {
-      db.all(`SELECT username, voice_minutes FROM stats WHERE guild_id = ? ORDER BY voice_minutes DESC LIMIT 5`, [guildId], (err, rows) => {
-        resolve(rows || []);
-      });
-    });
+    const data = load();
+    if (!data[guildId]) return [];
+    return Object.values(data[guildId]).sort((a, b) => b.voice_minutes - a.voice_minutes).slice(0, 5);
   },
   getUserStats(guildId, userId) {
-    return new Promise((resolve) => {
-      db.get(`SELECT * FROM stats WHERE guild_id = ? AND user_id = ?`, [guildId, userId], (err, row) => {
-        resolve(row || null);
-      });
-    });
+    const data = load();
+    return data[guildId]?.[userId] || null;
   },
   resetStats(guildId) {
-    db.run(`DELETE FROM stats WHERE guild_id = ?`, [guildId]);
+    const data = load();
+    data[guildId] = {};
+    save(data);
   }
 };
