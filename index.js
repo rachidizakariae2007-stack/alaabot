@@ -63,6 +63,7 @@ client.on('voiceStateUpdate', (oldState, newState) => {
 
 client.on('interactionCreate', async (interaction) => {
   if (!interaction.isChatInputCommand()) return;
+   if (interaction.replied || interaction.deferred) return;
 
   if (interaction.commandName === 'top') {
     const topMessages = await db.getTopMessages(interaction.guild.id);
