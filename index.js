@@ -31,13 +31,14 @@ async function registerCommands() {
   console.log('✅ Slash commands registered!');
 }
 
-client.once('ready', () => {
-  console.log(`✅ ALAA is online as ${client.user.tag}`);
+client.once('clientReady', () => {
+  console.log(`✅ NEXUS is online as ${client.user.tag}`);
   registerCommands();
 });
 
 client.on('messageCreate', (message) => {
   if (message.author.bot) return;
+  if (!message.guild) return;
   db.addMessage(message.guild.id, message.author.id, message.author.username);
 });
 
@@ -63,54 +64,46 @@ client.on('voiceStateUpdate', (oldState, newState) => {
 
 client.on('interactionCreate', async (interaction) => {
   if (!interaction.isChatInputCommand()) return;
-   if (interaction.replied || interaction.deferred) return;
 
-  if (interaction.commandName === 'top') {
-    const topMessages = await db.getTopMessages(interaction.guild.id);
-    const topVoice = await db.getTopVoice(interaction.guild.id);
+  try {
+    if (interaction.commandName === 'top') {
+      const topMessages = await db.getTopMessages(interaction.guild.id);
+      const topVoice = await db.getTopVoice(interaction.guild.id);
 
-    const embed = new EmbedBuilder()
-      .setColor(0x5865F2)
-      .setTitle('🏆 NEXUS — Weekly Activity Report')
-      .addFields(
-        { name: '💬 Top Message Senders', value: topMessages.length ? topMessages.map((u, i) => `**${i+1}.** ${u.username} — ${u.messages} messages`).join('\n') : 'No data yet.' },
-        { name: '🎙️ Top Voice Members', value: topVoice.length ? topVoice.map((u, i) => `**${i+1}.** ${u.username} — ${formatTime(u.voice_minutes)}`).join('\n') : 'No data yet.' }
-      )
-      .setFooter({ text: 'NEXUS Bot' })
-      .setTimestamp();
+      const embed = new EmbedBuilder()
+        .setColor(0x5865F2)
+        .setTitle('🏆 NEXUS — Weekly Activity Report')
+        .addFields(
+          { name: '💬 Top Message Senders', value: topMessages.length ? topMessages.map((u, i) => `**${i+1}.** ${u.username} — ${u.messages} messages`).join('\n') : 'No data yet.' },
+          { name: '🎙️ Top Voice Members', value: topVoice.length ? topVoice.map((u, i) => `**${i+1}.** ${u.username} — ${formatTime(u.voice_minutes)}`).join('\n') : 'No data yet.' }
+        )
+        .setFooter({ text: 'NEXUS Bot' })
+        .setTimestamp();
 
-    await interaction.reply({ embeds: [embed] });
-  }
+      await interaction.reply({ embeds: [embed] });
+    }
 
-  if (interaction.commandName === 'mystats') {
-    const stats = await db.getUserStats(interaction.guild.id, interaction.user.id);
-    const embed = new EmbedBuilder()
-      .setColor(0x57F287)
-      .setTitle(`📊 ${interaction.user.username}'s Stats`)
-      .addFields(
-        { name: '💬 Messages', value: `${stats?.messages || 0}`, inline: true },
-        { name: '🎙️ Voice Time', value: formatTime(stats?.voice_minutes || 0), inline: true }
-      );
-    await interaction.reply({ embeds: [embed] });
-  }
+    else if (interaction.commandName === 'mystats') {
+      const stats = await db.getUserStats(interaction.guild.id, interaction.user.id);
+      const embed = new EmbedBuilder()
+        .setColor(0x57F287)
+        .setTitle(`📊 ${interaction.user.username}'s Stats`)
+        .addFields(
+          { name: '💬 Messages', value: `${stats?.messages || 0}`, inline: true },
+          { name: '🎙️ Voice Time', value: formatTime(stats?.voice_minutes || 0), inline: true }
+        );
+      await interaction.reply({ embeds: [embed] });
+    }
 
-  if (interaction.commandName === 'mystats') {
-    const stats = db.getUserStats(interaction.guild.id, interaction.user.id);
-    const embed = new EmbedBuilder()
-      .setColor(0x57F287)
-      .setTitle(`📊 ${interaction.user.username}'s Stats`)
-      .addFields(
-        { name: '💬 Messages', value: `${stats?.messages || 0}`, inline: true },
-        { name: '🎙️ Voice Time', value: formatTime(stats?.voice_minutes || 0), inline: true }
-      );
-    await interaction.reply({ embeds: [embed] });
-  }
+    else if (interaction.commandName === 'reset') {
+      if (!interaction.member.permissions.has('Administrator'))
+        return interaction.reply({ content: '❌ Admins only!', ephemeral: true });
+      db.resetStats(interaction.guild.id);
+      await interaction.reply('🔄 Stats reset!');
+    }
 
-  if (interaction.commandName === 'reset') {
-    if (!interaction.member.permissions.has('Administrator'))
-      return interaction.reply({ content: '❌ Admins only!', ephemeral: true });
-    db.resetStats(interaction.guild.id);
-    await interaction.reply('🔄 Stats reset!');
+  } catch (err) {
+    console.error(err);
   }
 });
 
