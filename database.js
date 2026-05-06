@@ -1,53 +1,44 @@
-const fs = require('fs');
-const path = require('path');
-const DB_FILE = path.join('/tmp', 'stats.json');
+const mongoose = require('mongoose');
 
-function load() {
-  try {
-    if (fs.existsSync(DB_FILE)) return JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
-  } catch {}
-  return {};
-}
+mongoose.connect(process.env.MONGO_URL).then(() => {
+  console.log('✅ Connected to MongoDB!');
+}).catch(err => console.error('MongoDB error:', err));
 
-function save(data) {
-  fs.writeFileSync(DB_FILE, JSON.stringify(data));
-}
+const statsSchema = new mongoose.Schema({
+  guild_id: String,
+  user_id: String,
+  username: String,
+  messages: { type: Number, default: 0 },
+  voice_minutes: { type: Number, default: 0 }
+});
 
-function getUser(data, guildId, userId, username) {
-  if (!data[guildId]) data[guildId] = {};
-  if (!data[guildId][userId]) data[guildId][userId] = { username, messages: 0, voice_minutes: 0 };
-  data[guildId][userId].username = username;
-  return data[guildId][userId];
-}
+const Stats = mongoose.model('Stats', statsSchema);
 
 module.exports = {
-  addMessage(guildId, userId, username) {
-    const data = load();
-    getUser(data, guildId, userId, username).messages += 1;
-    save(data);
+  async addMessage(guildId, userId, username) {
+    await Stats.findOneAndUpdate(
+      { guild_id: guildId, user_id: userId },
+      { $inc: { messages: 1 }, $set: { username } },
+      { upsert: true }
+    );
   },
-  addVoiceTime(guildId, userId, username, minutes) {
-    const data = load();
-    getUser(data, guildId, userId, username).voice_minutes += minutes;
-    save(data);
+  async addVoiceTime(guildId, userId, username, minutes) {
+    await Stats.findOneAndUpdate(
+      { guild_id: guildId, user_id: userId },
+      { $inc: { voice_minutes: minutes }, $set: { username } },
+      { upsert: true }
+    );
   },
-  getTopMessages(guildId) {
-    const data = load();
-    if (!data[guildId]) return [];
-    return Object.values(data[guildId]).sort((a, b) => b.messages - a.messages).slice(0, 5);
+  async getTopMessages(guildId) {
+    return await Stats.find({ guild_id: guildId }).sort({ messages: -1 }).limit(5);
   },
-  getTopVoice(guildId) {
-    const data = load();
-    if (!data[guildId]) return [];
-    return Object.values(data[guildId]).sort((a, b) => b.voice_minutes - a.voice_minutes).slice(0, 5);
+  async getTopVoice(guildId) {
+    return await Stats.find({ guild_id: guildId }).sort({ voice_minutes: -1 }).limit(5);
   },
-  getUserStats(guildId, userId) {
-    const data = load();
-    return data[guildId]?.[userId] || null;
+  async getUserStats(guildId, userId) {
+    return await Stats.findOne({ guild_id: guildId, user_id: userId });
   },
-  resetStats(guildId) {
-    const data = load();
-    data[guildId] = {};
-    save(data);
+  async resetStats(guildId) {
+    await Stats.deleteMany({ guild_id: guildId });
   }
 };
