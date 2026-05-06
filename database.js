@@ -16,11 +16,16 @@ const Stats = mongoose.model('Stats', statsSchema);
 
 module.exports = {
   async addMessage(guildId, userId, username) {
-    await Stats.findOneAndUpdate(
-      { guild_id: guildId, user_id: userId },
-      { $inc: { messages: 1 }, $set: { username } },
-      { upsert: true }
-    );
+    try {
+      await Stats.findOneAndUpdate(
+        { guild_id: guildId, user_id: userId },
+        { $inc: { messages: 1 }, $set: { username } },
+        { upsert: true, new: true }
+      );
+      console.log(`✅ Message counted for ${username}`);
+    } catch (err) {
+      console.error('❌ addMessage error:', err);
+    }
   },
   async addVoiceTime(guildId, userId, username, minutes) {
     await Stats.findOneAndUpdate(
