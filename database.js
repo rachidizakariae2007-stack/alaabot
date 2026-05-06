@@ -20,7 +20,7 @@ module.exports = {
       await Stats.findOneAndUpdate(
         { guild_id: guildId, user_id: userId },
         { $inc: { messages: 1 }, $set: { username } },
-        { upsert: true, new: true }
+        { upsert: true, returnDocument: 'after' }
       );
       console.log(`✅ Message counted for ${username}`);
     } catch (err) {
@@ -28,22 +28,59 @@ module.exports = {
     }
   },
   async addVoiceTime(guildId, userId, username, minutes) {
-    await Stats.findOneAndUpdate(
-      { guild_id: guildId, user_id: userId },
-      { $inc: { voice_minutes: minutes }, $set: { username } },
-      { upsert: true }
-    );
+    try {
+      await Stats.findOneAndUpdate(
+        { guild_id: guildId, user_id: userId },
+        { $inc: { voice_minutes: minutes }, $set: { username } },
+        { upsert: true, returnDocument: 'after' }
+      );
+      console.log(`✅ Voice time added for ${username}: ${minutes}m`);
+    } catch (err) {
+      console.error('❌ addVoiceTime error:', err);
+    }
   },
   async getTopMessages(guildId) {
-    return await Stats.find({ guild_id: guildId }).sort({ messages: -1 }).limit(5);
+    try {
+      const results = await Stats.find({ guild_id: guildId, messages: { $gt: 0 } })
+        .sort({ messages: -1 })
+        .limit(5)
+        .lean();
+      console.log(`📊 getTopMessages results:`, JSON.stringify(results));
+      return results;
+    } catch (err) {
+      console.error('❌ getTopMessages error:', err);
+      return [];
+    }
   },
   async getTopVoice(guildId) {
-    return await Stats.find({ guild_id: guildId }).sort({ voice_minutes: -1 }).limit(5);
+    try {
+      const results = await Stats.find({ guild_id: guildId, voice_minutes: { $gt: 0 } })
+        .sort({ voice_minutes: -1 })
+        .limit(5)
+        .lean();
+      console.log(`📊 getTopVoice results:`, JSON.stringify(results));
+      return results;
+    } catch (err) {
+      console.error('❌ getTopVoice error:', err);
+      return [];
+    }
   },
   async getUserStats(guildId, userId) {
-    return await Stats.findOne({ guild_id: guildId, user_id: userId });
+    try {
+      const result = await Stats.findOne({ guild_id: guildId, user_id: userId }).lean();
+      console.log(`📊 getUserStats result:`, JSON.stringify(result));
+      return result;
+    } catch (err) {
+      console.error('❌ getUserStats error:', err);
+      return null;
+    }
   },
   async resetStats(guildId) {
-    await Stats.deleteMany({ guild_id: guildId });
+    try {
+      await Stats.deleteMany({ guild_id: guildId });
+      console.log(`🔄 Stats reset for guild ${guildId}`);
+    } catch (err) {
+      console.error('❌ resetStats error:', err);
+    }
   }
 };
