@@ -37,8 +37,10 @@ client.once('clientReady', () => {
 });
 
 client.on('messageCreate', (message) => {
+  console.log(`📨 Message received from ${message.author?.username}`);
   if (message.author.bot) return;
   if (!message.guild) return;
+  console.log(`✅ Counting message for ${message.author.username}`);
   db.addMessage(message.guild.id, message.author.id, message.author.username);
 });
 
