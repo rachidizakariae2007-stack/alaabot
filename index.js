@@ -51,10 +51,12 @@ client.on('voiceStateUpdate', (oldState, newState) => {
   const key = `${guildId}:${userId}`;
 
   if (!oldState.channelId && newState.channelId) {
+    if (newState.channel.name.toLowerCase() === 'afk') return;
     voiceSessions.set(key, Date.now());
   }
 
-  if (oldState.channelId && !newState.channelId) {
+if (oldState.channelId && !newState.channelId) {
+    if (oldState.channel.name.toLowerCase() === 'afk') return;
     const joinTime = voiceSessions.get(key);
     if (joinTime) {
       const minutes = Math.floor((Date.now() - joinTime) / 60000);
