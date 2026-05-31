@@ -19,6 +19,24 @@ function formatTime(minutes) {
   return `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
 }
 
+function parseDuration(str) {
+  if (!str) return null;
+  const match = str.match(/^(\d+)(m|h|d)$/);
+  if (!match) return null;
+  const value = parseInt(match[1]);
+  const unit = match[2];
+  if (unit === 'm') return value * 60 * 1000;
+  if (unit === 'h') return value * 60 * 60 * 1000;
+  if (unit === 'd') return value * 24 * 60 * 60 * 1000;
+  return null;
+}
+
+function hasJailPermission(member) {
+  const allowedRoles = ['administrator', 'supervisor', 'founder'];
+  return member.permissions.has('Administrator') ||
+    member.roles.cache.some(r => allowedRoles.includes(r.name.toLowerCase()));
+}
+
 async function registerCommands() {
   const commands = [
     new SlashCommandBuilder()
@@ -37,8 +55,8 @@ async function registerCommands() {
       .setName('jail')
       .setDescription('Put a member in jail')
       .addUserOption(option => option.setName('user').setDescription('The user to jail').setRequired(true))
-      .addStringOption(option => option.setName('period').setDescription('Duration e.g. 1h, 30m, 1d').setRequired(true))
-      .addStringOption(option => option.setName('reason').setDescription('Reason for jail').setRequired(true)),
+      .addStringOption(option => option.setName('reason').setDescription('Reason for jail').setRequired(true))
+      .addStringOption(option => option.setName('period').setDescription('Duration e.g. 1h, 30m, 1d (optional)').setRequired(false)),
 
     new SlashCommandBuilder()
       .setName('free')
@@ -57,22 +75,10 @@ async function registerCommands() {
   console.log('✅ Slash commands registered!');
 }
 
-function parseDuration(str) {
-  const match = str.match(/^(\d+)(m|h|d)$/);
-  if (!match) return null;
-  const value = parseInt(match[1]);
-  const unit = match[2];
-  if (unit === 'm') return value * 60 * 1000;
-  if (unit === 'h') return value * 60 * 60 * 1000;
-  if (unit === 'd') return value * 24 * 60 * 60 * 1000;
-  return null;
-}
-
 client.once('clientReady', () => {
   console.log(`✅ NEXUS is online as ${client.user.tag}`);
   registerCommands();
 
-  // Check every minute for expired jails
   setInterval(async () => {
     const now = Date.now();
     const expired = await db.getExpiredJails(now);
@@ -181,26 +187,28 @@ client.on('interactionCreate', async (interaction) => {
     }
 
     else if (interaction.commandName === 'jail') {
-      if (!interaction.member.permissions.has('Administrator'))
-        return interaction.reply({ content: '❌ Admins only!', ephemeral: true });
+      if (!hasJailPermission(interaction.member))
+        return interaction.reply({ content: '❌ ما عندكش الصلاحية!', ephemeral: true });
 
       const target = interaction.options.getMember('user');
-      const period = interaction.options.getString('period');
       const reason = interaction.options.getString('reason');
+      const period = interaction.options.getString('period');
 
-      const duration = parseDuration(period);
-      if (!duration) return interaction.reply({ content: '❌ Invalid period! Use format like: 30m, 1h, 2d', ephemeral: true });
+      const duration = period ? parseDuration(period) : null;
+      if (period && !duration)
+        return interaction.reply({ content: '❌ مدة غير صحيحة! استخدم مثلاً: 30m أو 1h أو 2d', ephemeral: true });
 
       const jailRole = interaction.guild.roles.cache.find(r => r.name.toLowerCase() === 'jail');
-      if (!jailRole) return interaction.reply({ content: '❌ No role named "jail" found! Create it first.', ephemeral: true });
+      if (!jailRole)
+        return interaction.reply({ content: '❌ ما لقيتش رول اسمه "jail"! أنشئه أولاً.', ephemeral: true });
 
       await target.roles.add(jailRole);
 
-      const releaseTime = Date.now() + duration;
+      const releaseTime = duration ? Date.now() + duration : null;
       await db.addJail(interaction.guild.id, target.id, target.user.username, reason, releaseTime);
 
       try {
-        await target.send(`🚨 لقد تم وضعك في السجن في سيرفر **${interaction.guild.name}**!\n📋 **السبب:** ${reason}\n⏰ **المدة:** ${period}`);
+        await target.send(`🚨 لقد تم وضعك في السجن في سيرفر **${interaction.guild.name}**!\n📋 **السبب:** ${reason}${period ? `\n⏰ **المدة:** ${period}` : '\n⏰ **المدة:** غير محددة - سيتم الإفراج عنك يدوياً'}`);
       } catch {}
 
       const embed = new EmbedBuilder()
@@ -208,7 +216,7 @@ client.on('interactionCreate', async (interaction) => {
         .setTitle('🚨 تم السجن')
         .addFields(
           { name: '👤 العضو', value: `${target.user.username}`, inline: true },
-          { name: '⏰ المدة', value: period, inline: true },
+          { name: '⏰ المدة', value: period || 'غير محددة', inline: true },
           { name: '📋 السبب', value: reason }
         )
         .setTimestamp();
@@ -216,14 +224,14 @@ client.on('interactionCreate', async (interaction) => {
     }
 
     else if (interaction.commandName === 'free') {
-      if (!interaction.member.permissions.has('Administrator'))
-        return interaction.reply({ content: '❌ Admins only!', ephemeral: true });
+      if (!hasJailPermission(interaction.member))
+        return interaction.reply({ content: '❌ ما عندكش الصلاحية!', ephemeral: true });
 
       const target = interaction.options.getMember('user');
       const jailRole = interaction.guild.roles.cache.find(r => r.name.toLowerCase() === 'jail');
 
       if (!jailRole || !target.roles.cache.has(jailRole.id))
-        return interaction.reply({ content: '❌ This user is not in jail!', ephemeral: true });
+        return interaction.reply({ content: '❌ هذا العضو مش في السجن!', ephemeral: true });
 
       await target.roles.remove(jailRole);
       await db.removeJail(interaction.guild.id, target.id);
@@ -232,7 +240,7 @@ client.on('interactionCreate', async (interaction) => {
         await target.send(`✅ تم الإفراج عنك في سيرفر **${interaction.guild.name}**!`);
       } catch {}
 
-      await interaction.reply(`✅ تم الإفراج عن **${target.user.username}** !`);
+      await interaction.reply(`✅ تم الإفراج عن **${target.user.username}**!`);
     }
 
     else if (interaction.commandName === 'jailhistory') {
@@ -240,13 +248,13 @@ client.on('interactionCreate', async (interaction) => {
       const history = await db.getJailHistory(interaction.guild.id, target.id);
 
       if (!history.length)
-        return interaction.reply({ content: `✅ **${target.username}** has no jail history.`, ephemeral: true });
+        return interaction.reply({ content: `✅ **${target.username}** ما عندوش سوابق.`, ephemeral: true });
 
       const embed = new EmbedBuilder()
         .setColor(0xFF6600)
-        .setTitle(`📋 Jail History — ${target.username}`)
+        .setTitle(`📋 سوابق السجن — ${target.username}`)
         .setDescription(history.map((h, i) =>
-          `**${i+1}.** 📋 ${h.reason} | ⏰ ${new Date(h.jailed_at).toLocaleDateString()}`
+          `**${i+1}.** 📋 ${h.reason} | 📅 ${new Date(h.jailed_at).toLocaleDateString()}`
         ).join('\n'))
         .setTimestamp();
       await interaction.reply({ embeds: [embed] });
