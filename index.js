@@ -84,8 +84,10 @@ client.once('clientReady', () => {
     const expired = await db.getExpiredJails(now);
     for (const jail of expired) {
       try {
-        const guild = await client.guilds.fetch(jail.guild_id);
-        const member = await guild.members.fetch(jail.user_id);
+        const guild = await client.guilds.fetch(jail.guild_id).catch(() => null);
+      if (!guild) continue;
+      const member = await guild.members.fetch(jail.user_id).catch(() => null);
+      if (!member) continue;
         const jailRole = guild.roles.cache.find(r => r.name.toLowerCase() === 'jail');
         if (jailRole && member.roles.cache.has(jailRole.id)) {
           await member.roles.remove(jailRole);
