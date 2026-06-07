@@ -68,6 +68,11 @@ async function registerCommands() {
       .setDescription('See jail history of a user')
       .addUserOption(option => option.setName('user').setDescription('The user to check').setRequired(true)),
 
+    new SlashCommandBuilder()
+      .setName('deletelast')
+      .setDescription('Delete the last message of a user in all channels')
+      .addUserOption(option => option.setName('user').setDescription('The user').setRequired(true)),
+
   ].map(c => c.toJSON());
 
   const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
@@ -85,9 +90,9 @@ client.once('clientReady', () => {
     for (const jail of expired) {
       try {
         const guild = await client.guilds.fetch(jail.guild_id).catch(() => null);
-      if (!guild) continue;
-      const member = await guild.members.fetch(jail.user_id).catch(() => null);
-      if (!member) continue;
+        if (!guild) continue;
+        const member = await guild.members.fetch(jail.user_id).catch(() => null);
+        if (!member) continue;
         const jailRole = guild.roles.cache.find(r => r.name.toLowerCase() === 'jail');
         if (jailRole && member.roles.cache.has(jailRole.id)) {
           await member.roles.remove(jailRole);
@@ -243,6 +248,33 @@ client.on('interactionCreate', async (interaction) => {
       } catch {}
 
       await interaction.reply(`✅ تم الإفراج عن **${target.user.username}**!`);
+    }
+
+    else if (interaction.commandName === 'deletelast') {
+      if (!hasJailPermission(interaction.member))
+        return interaction.reply({ content: '❌ ما عندكش الصلاحية!', ephemeral: true });
+
+      const target = interaction.options.getUser('user');
+      await interaction.deferReply({ ephemeral: true });
+
+      let deleted = 0;
+      const channels = interaction.guild.channels.cache.filter(c => c.isTextBased());
+
+      for (const channel of channels.values()) {
+        try {
+          const messages = await channel.messages.fetch({ limit: 100 });
+          const lastMsg = messages.find(m => m.author.id === target.id);
+          if (lastMsg) {
+            await lastMsg.delete();
+            deleted++;
+          }
+        } catch {}
+      }
+
+      await interaction.editReply(deleted > 0
+        ? `✅ تم حذف آخر رسالة لـ **${target.username}** في ${deleted} قناة!`
+        : `❌ ما لقيتش أي رسالة لـ **${target.username}**!`
+      );
     }
 
     else if (interaction.commandName === 'jailhistory') {
