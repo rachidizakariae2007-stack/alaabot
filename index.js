@@ -32,7 +32,7 @@ function parseDuration(str) {
 }
 
 function hasJailPermission(member) {
-  const allowedRoles = ['administrator', 'supervisor', 'founder'];
+  const allowedRoles = ['administrator', 'supervisor', 'founder', 'staff'];
   return member.permissions.has('Administrator') ||
     member.roles.cache.some(r => allowedRoles.includes(r.name.toLowerCase()));
 }
